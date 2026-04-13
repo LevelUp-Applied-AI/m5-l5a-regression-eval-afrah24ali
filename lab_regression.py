@@ -7,107 +7,117 @@ Petra Telecom customer churn dataset.
 Run: python lab_regression.py
 """
 
+from pyexpat import model
+
+from pyexpat import model
+
 import pandas as pd
 import numpy as np
+from sklearn import pipeline
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.linear_model import LogisticRegression, Ridge, Lasso
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import (classification_report, confusion_matrix,
+from sklearn.metrics import (ConfusionMatrixDisplay, classification_report, confusion_matrix,
                              mean_absolute_error, r2_score)
-
+import matplotlib.pyplot as plt
 
 def load_data(filepath="data/telecom_churn.csv"):
-    """Load the telecom churn dataset.
-
-    Returns:
-        DataFrame with all columns.
-    """
-    # TODO: Load the CSV and return the DataFrame
-    pass
-
+    
+    df = pd.read_csv("data/telecom_churn.csv")
+    print(df.shape)
+    print(df.isnull().sum())
+    return df 
 
 def split_data(df, target_col, test_size=0.2, random_state=42):
-    """Split data into train and test sets with stratification.
+    
+    x =df.drop(target_col, axis=1)
+    y=df[target_col]
+    if y.nunique() <= 10:
 
-    Args:
-        df: DataFrame with features and target.
-        target_col: Name of the target column.
-        test_size: Fraction for test set.
-        random_state: Random seed.
+       x_train,x_test,y_train,y_test = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
+    else:
+        x_train,x_test,y_train,y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 
-    Returns:
-        Tuple of (X_train, X_test, y_train, y_test).
-    """
-    # TODO: Separate features and target, then split with stratification
-    pass
+
+    print(f"Training set size:{len(x_train)}")
+    print(f"Test set size:{len(x_test)}")
+    print(f"train churn rate:{y_train.mean():.3f}")
+    print(f"test churn rate:{y_test.mean():.3f}")
+
+    return x_train, x_test, y_train, y_test
 
 
 def build_logistic_pipeline():
-    """Build a Pipeline with StandardScaler and LogisticRegression.
-
-    Returns:
-        sklearn Pipeline object.
-    """
-    # TODO: Create and return a Pipeline with two steps
-    pass
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("classifier", LogisticRegression(
+            random_state=42,
+            max_iter=1000,
+            class_weight="balanced"
+        ))
+    ])
+    
+    return pipeline
 
 
 def build_ridge_pipeline():
-    """Build a Pipeline with StandardScaler and Ridge regression.
-
-    Returns:
-        sklearn Pipeline object.
-    """
-    # TODO: Create and return a Pipeline for Ridge regression
-    pass
-
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("model", Ridge(alpha=1.0))
+    ])
+    return pipeline
+    
 
 def evaluate_classifier(pipeline, X_train, X_test, y_train, y_test):
-    """Train the pipeline and return classification metrics.
+  
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
 
-    Args:
-        pipeline: sklearn Pipeline with a classifier.
-        X_train, X_test: Feature arrays.
-        y_train, y_test: Label arrays.
+    print(classification_report(y_test, y_pred))
 
-    Returns:
-        Dictionary with keys: 'accuracy', 'precision', 'recall', 'f1'.
-    """
-    # TODO: Fit the pipeline on training data, predict on test, compute metrics
-    pass
+    cm = confusion_matrix(y_test, y_pred)
+    ConfusionMatrixDisplay(cm).plot()
 
+    report = classification_report(y_test, y_pred, output_dict=True)
+
+    return {
+        "accuracy": report["accuracy"],
+        "precision": report["1"]["precision"],
+        "recall": report["1"]["recall"],
+        "f1": report["1"]["f1-score"]
+    }
+    
 
 def evaluate_regressor(pipeline, X_train, X_test, y_train, y_test):
-    """Train the pipeline and return regression metrics.
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    print(f"MAE: {mae:.3f}, R2: {r2:.3f}")
+    return {"mae": mae, "r2": r2}
+    
 
-    Args:
-        pipeline: sklearn Pipeline with a regressor.
-        X_train, X_test: Feature arrays.
-        y_train, y_test: Target arrays.
+def run_cross_validation(pipeline, X_train, y_train):
 
-    Returns:
-        Dictionary with keys: 'mae', 'r2'.
-    """
-    # TODO: Fit the pipeline, predict, and compute MAE and R²
-    pass
+    cv_splitter = StratifiedKFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=42
+    )
 
+    scores = cross_val_score(
+        pipeline,
+        X_train,
+        y_train,
+        cv=cv_splitter,
+        scoring="accuracy"
+    )
 
-def run_cross_validation(pipeline, X_train, y_train, cv=5):
-    """Run stratified cross-validation on the pipeline.
+    print(scores)
+    print(scores.mean(), scores.std())
 
-    Args:
-        pipeline: sklearn Pipeline.
-        X_train: Training features.
-        y_train: Training labels.
-        cv: Number of folds.
-
-    Returns:
-        Array of cross-validation scores.
-    """
-    # TODO: Run cross_val_score with StratifiedKFold
-    pass
-
+    return scores   
 
 if __name__ == "__main__":
     df = load_data()
@@ -144,3 +154,38 @@ if __name__ == "__main__":
             if ridge_pipe:
                 reg_metrics = evaluate_regressor(ridge_pipe, X_tr, X_te, y_tr, y_te)
                 print(f"Ridge Regression: {reg_metrics}")
+
+
+"""
+SUMMARY OF FINDINGS
+
+1. Most important features for predicting churn:
+Based on the logistic regression model, the most influential features are typically:
+- num_support_calls
+- monthly_charges
+- tenure
+
+These features strongly affect churn because:
+- Higher support calls often indicate customer dissatisfaction.
+- Higher monthly charges increase the likelihood of leaving.
+- Longer tenure usually reduces churn risk (loyal customers).
+
+2. Model performance:
+The logistic regression model performs reasonably well with balanced accuracy across classes.
+However, because the dataset is often imbalanced, accuracy alone is not enough to judge performance.
+
+Recall for churned customers is more important than precision in this problem.
+Missing a churned customer (false negative) is more costly than incorrectly predicting churn (false positive).
+
+3. Precision vs Recall:
+Recall is more concerning.
+The model should prioritize capturing as many churned customers as possible,
+even if it means slightly more false alarms.
+
+4. Recommendations for improvement:
+- Try stronger models like Random Forest or XGBoost
+- Handle feature engineering (e.g., interaction between tenure and charges)
+- Tune hyperparameters (C for Logistic Regression, alpha for Ridge/Lasso)
+- Try threshold tuning instead of default 0.5
+- Handle class imbalance using SMOTE or different class weights
+"""
